@@ -19,10 +19,12 @@
 4. /wallets показывает список с именами, адресами, балансами ETH и USD
 5. /removewallet удаляет кошелёк из списка
 
-**Plans:**
-- `01-01-PLAN.md`: Scaffolding — проект, зависимости, структура файлов, SQLite schema
-- `01-02-PLAN.md`: Bot commands — /start, /addwallet, /wallets, /removewallet + whitelist middleware
-- `01-03-PLAN.md`: Etherscan client — getBalance, ETH/USD price, валидация адреса
+**Plans:** 3 plans
+
+Plans:
+- [ ] `01-01-PLAN.md` — Walking Skeleton: scaffold, config, SQLite schema (wallets + last_block), whitelist middleware, /start
+- [ ] `01-02-PLAN.md` — Etherscan client (TDD): validate_address, getBalance, ETH/USD price, троттлинг
+- [ ] `01-03-PLAN.md` — Wallet commands: /addwallet (диалог), /wallets, /removewallet + изоляция по user_id
 
 ---
 
@@ -52,13 +54,13 @@
 
 | REQ-ID | Phase | Plan |
 |--------|-------|------|
-| AUTH-01 | 1 | 01-02 |
-| AUTH-02 | 1 | 01-02 |
-| WALLET-01 | 1 | 01-02 |
+| AUTH-01 | 1 | 01-01 |
+| AUTH-02 | 1 | 01-01 |
+| WALLET-01 | 1 | 01-03 |
 | WALLET-02 | 1 | 01-02 |
 | WALLET-03 | 1 | 01-02 + 01-03 |
-| WALLET-04 | 1 | 01-02 |
-| WALLET-05 | 1 | 01-02 |
+| WALLET-04 | 1 | 01-03 |
+| WALLET-05 | 1 | 01-03 |
 | DATA-01 | 1 | 01-01 |
 | DATA-02 | 2 | 02-01 |
 | MON-01 | 2 | 02-01 |
@@ -66,7 +68,7 @@
 | MON-03 | 2 | 02-02 |
 | MON-04 | 2 | 02-02 |
 | INFRA-01 | 2 | 02-03 |
-| INFRA-02 | 2 | 02-03 |
+| INFRA-02 | 1 | 01-01 (.env config заложен) + 2 | 02-03 |
 | INFRA-03 | 2 | 02-01 |
 
 All 13 v1 requirements covered ✓
