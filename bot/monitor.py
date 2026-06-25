@@ -8,6 +8,7 @@ from decimal import Decimal
 import aiohttp
 from telegram.ext import Application
 
+from bot import config
 from bot.database import get_all_wallets, is_alert_sent, mark_alert_sent, update_last_block
 from bot.etherscan import get_current_block, get_eth_price, get_transactions, wei_to_eth
 
@@ -59,9 +60,8 @@ async def _check_wallet(
     last_block = wallet["last_block"]
 
     if last_block == 0:
-        # First run: initialize to current block, skip historical txns
         current_block = await get_current_block(session=session)
-        await update_last_block(wallet["user_id"], address, current_block)
+        await update_last_block(address, current_block)
         logger.info("Initialized %s... at block %d", address[:10], current_block)
         return
 
@@ -70,21 +70,21 @@ async def _check_wallet(
         return
 
     max_block = max(tx["block_number"] for tx in txns)
-    await update_last_block(wallet["user_id"], address, max_block)
+    await update_last_block(address, max_block)
 
     for tx in txns:
-        if tx["is_error"]:  # T-02-09: skip failed transactions
+        if tx["is_error"]:
             continue
-        if not _should_alert(tx["value_wei"], eth_price):  # MON-02: threshold check
+        if not _should_alert(tx["value_wei"], eth_price):
             continue
-        if await is_alert_sent(tx["hash"], wallet["user_id"]):  # MON-04: dedup
+        if await is_alert_sent(tx["hash"]):
             continue
         try:
             message = _format_alert(wallet["name"], address, tx, eth_price)
-            await app.bot.send_message(
-                chat_id=wallet["user_id"], text=message, parse_mode="Markdown"
-            )
-            await mark_alert_sent(tx["hash"], wallet["user_id"])  # mark AFTER send
+            # Send to all allowed users
+            for user_id in config.ALLOWED_USER_IDS:
+                await app.bot.send_message(chat_id=user_id, text=message, parse_mode="Markdown")
+            await mark_alert_sent(tx["hash"])
         except Exception:
             logger.exception("Failed to send alert for tx %s", tx["hash"][:12])
 

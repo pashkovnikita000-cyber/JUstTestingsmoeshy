@@ -10,16 +10,12 @@ from bot.database import add_wallet, count_wallets, get_wallets, remove_wallet, 
 from bot.etherscan import get_balance, get_eth_price, get_usdc_balance, validate_address
 from bot.middleware import restricted
 
-# ---------------------------------------------------------------------------
-# Conversation states for /addwallet dialog (D-01)
-# ---------------------------------------------------------------------------
-
 ASK_ADDRESS = 0
 ASK_NAME = 1
 
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
-        [KeyboardButton("➕ Добавить кошелёк"), KeyboardButton("👛 Мои кошельки")],
+        [KeyboardButton("➕ Добавить кошелёк"), KeyboardButton("👛 Кошельки")],
         [KeyboardButton("🗑 Удалить кошелёк")],
     ],
     resize_keyboard=True,
@@ -30,33 +26,22 @@ def shorten(address: str) -> str:
     return f"{address[:6]}...{address[-4:]}"
 
 
-# ---------------------------------------------------------------------------
-# /start
-# ---------------------------------------------------------------------------
-
 @restricted
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    n = await count_wallets(user.id)
+    n = await count_wallets()
     await update.message.reply_text(
         f"✅ Bot is running. Tracking {n} wallets.",
         reply_markup=MAIN_KEYBOARD,
     )
 
 
-# ---------------------------------------------------------------------------
-# /addwallet ConversationHandler (D-01, D-02, D-03)
-# ---------------------------------------------------------------------------
-
 @restricted
 async def addwallet_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Entry point: prompt for ETH address."""
     await update.message.reply_text("Send me the ETH wallet address:")
     return ASK_ADDRESS
 
 
 async def addwallet_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """ASK_ADDRESS state: validate address (WALLET-02, T-01-10)."""
     addr = update.message.text.strip()
 
     if not validate_address(addr):
@@ -64,13 +49,12 @@ async def addwallet_address(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "Invalid ETH address. Must start with 0x followed by 40 hex characters.\n"
             "Please try again or /cancel."
         )
-        return ASK_ADDRESS  # stay in state, ask again
+        return ASK_ADDRESS
 
-    user_id = update.effective_user.id
-    if await wallet_exists(user_id, addr):
+    if await wallet_exists(addr):
         await update.message.reply_text("Wallet already tracked.")
         context.user_data.clear()
-        return ConversationHandler.END  # D-03
+        return ConversationHandler.END
 
     context.user_data["pending_address"] = addr
     await update.message.reply_text("Got it! Now send a name for this wallet:")
@@ -78,16 +62,14 @@ async def addwallet_address(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def addwallet_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """ASK_NAME state: save wallet and show initial balance (WALLET-01, specifics)."""
     name = update.message.text.strip()
     addr = context.user_data.pop("pending_address", None)
-    user_id = update.effective_user.id
 
     if not addr:
         await update.message.reply_text("Something went wrong. Please /addwallet again.")
         return ConversationHandler.END
 
-    await add_wallet(user_id, addr, name)
+    await add_wallet(addr, name)
 
     short = shorten(addr)
     try:
@@ -104,7 +86,7 @@ async def addwallet_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"USDC: ${usdc_str}",
             parse_mode="Markdown",
         )
-    except Exception:  # T-01-13: degrade gracefully, wallet is saved
+    except Exception:
         await update.message.reply_text(
             f"✅ Added *{name}* `{short}`\n"
             "Balance: temporarily unavailable.",
@@ -116,20 +98,14 @@ async def addwallet_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 @restricted
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """D-02: /cancel — abort dialog without saving."""
     context.user_data.clear()
     await update.message.reply_text("Cancelled.", reply_markup=MAIN_KEYBOARD)
     return ConversationHandler.END
 
 
-# ---------------------------------------------------------------------------
-# /wallets (WALLET-03, D-04, D-05, D-06)
-# ---------------------------------------------------------------------------
-
 @restricted
 async def wallets(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    wallet_list = await get_wallets(user_id)
+    wallet_list = await get_wallets()
 
     if not wallet_list:
         await update.message.reply_text("No wallets tracked. Use /addwallet", reply_markup=MAIN_KEYBOARD)
@@ -138,7 +114,7 @@ async def wallets(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         price: Decimal = await get_eth_price()
     except Exception:
-        price = Decimal("0")  # T-01-13: show wallets even if price fetch fails
+        price = Decimal("0")
 
     lines: list[str] = []
     for w in wallet_list:
@@ -156,32 +132,25 @@ async def wallets(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"ETH: {eth_str} ({usd_str})\n"
                 f"USDC: ${usdc_str}"
             )
-        except Exception:  # T-01-13
+        except Exception:
             lines.append(f"*{w['name']}* `{short}`\nBalance: temporarily unavailable")
-        await asyncio.sleep(0.25)  # D-06: throttle
+        await asyncio.sleep(0.25)
 
     await update.message.reply_text("\n\n".join(lines), parse_mode="Markdown", reply_markup=MAIN_KEYBOARD)
 
 
-# ---------------------------------------------------------------------------
-# /removewallet (WALLET-04, WALLET-05)
-# ---------------------------------------------------------------------------
-
 @restricted
 async def removewallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-
     if context.args:
         addr = context.args[0].strip()
-        removed = await remove_wallet(user_id, addr)
+        removed = await remove_wallet(addr)
         if removed:
             await update.message.reply_text(f"✅ Removed wallet {shorten(addr)}.", reply_markup=MAIN_KEYBOARD)
         else:
             await update.message.reply_text("Wallet not found.", reply_markup=MAIN_KEYBOARD)
         return
 
-    # No args — show inline keyboard with wallet list
-    wallet_list = await get_wallets(user_id)
+    wallet_list = await get_wallets()
     if not wallet_list:
         await update.message.reply_text("No wallets tracked.", reply_markup=MAIN_KEYBOARD)
         return
@@ -207,7 +176,7 @@ async def remove_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     addr = query.data.split(":", 1)[1]
-    removed = await remove_wallet(user.id, addr)
+    removed = await remove_wallet(addr)
     if removed:
         await query.edit_message_text(f"✅ Удалён кошелёк {shorten(addr)}.")
     else:

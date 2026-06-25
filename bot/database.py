@@ -6,8 +6,6 @@ import aiosqlite
 
 from bot import config
 
-# ponytail: single connection per call — no pool needed at < 100 wallets / single user
-
 
 async def init_db() -> None:
     db_path = config.DATABASE_PATH
@@ -16,15 +14,21 @@ async def init_db() -> None:
         os.makedirs(db_dir, exist_ok=True)
 
     async with aiosqlite.connect(db_path) as db:
+        # Migrate from per-user schema to shared schema if needed
+        async with db.execute("PRAGMA table_info(wallets)") as cur:
+            columns = {row[1] for row in await cur.fetchall()}
+        if "user_id" in columns:
+            await db.execute("DROP TABLE wallets")
+            await db.execute("DROP TABLE IF EXISTS sent_alerts")
+            await db.commit()
+
         await db.execute(
             """
             CREATE TABLE IF NOT EXISTS wallets (
-                id       INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id  INTEGER NOT NULL,
-                address  TEXT    NOT NULL,
-                name     TEXT    NOT NULL,
-                last_block INTEGER DEFAULT 0,
-                UNIQUE(user_id, address)
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                address    TEXT    NOT NULL UNIQUE,
+                name       TEXT    NOT NULL,
+                last_block INTEGER DEFAULT 0
             )
             """
         )
@@ -32,66 +36,55 @@ async def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS sent_alerts (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                tx_hash    TEXT    NOT NULL,
-                user_id    INTEGER NOT NULL,
-                alerted_at TEXT    DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(tx_hash, user_id)
+                tx_hash    TEXT    NOT NULL UNIQUE,
+                alerted_at TEXT    DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
         await db.commit()
 
 
-async def count_wallets(user_id: int) -> int:
+async def count_wallets() -> int:
     async with aiosqlite.connect(config.DATABASE_PATH) as db:
-        async with db.execute(
-            "SELECT COUNT(*) FROM wallets WHERE user_id = ?", (user_id,)
-        ) as cursor:
+        async with db.execute("SELECT COUNT(*) FROM wallets") as cursor:
             row = await cursor.fetchone()
             return int(row[0]) if row else 0
 
 
-async def wallet_exists(user_id: int, address: str) -> bool:
-    """Return True iff (user_id, address) already in wallets. WALLET-05."""
+async def wallet_exists(address: str) -> bool:
     async with aiosqlite.connect(config.DATABASE_PATH) as db:
         async with db.execute(
-            "SELECT 1 FROM wallets WHERE user_id = ? AND address = ? LIMIT 1",
-            (user_id, address),
+            "SELECT 1 FROM wallets WHERE address = ? LIMIT 1", (address,)
         ) as cursor:
             return await cursor.fetchone() is not None
 
 
-async def add_wallet(user_id: int, address: str, name: str) -> bool:
-    """Insert wallet; return False if (user_id, address) already tracked (D-03)."""
-    if await wallet_exists(user_id, address):
+async def add_wallet(address: str, name: str) -> bool:
+    """Insert wallet; return False if address already tracked."""
+    if await wallet_exists(address):
         return False
     async with aiosqlite.connect(config.DATABASE_PATH) as db:
         await db.execute(
-            "INSERT INTO wallets (user_id, address, name) VALUES (?, ?, ?)",
-            (user_id, address, name),
+            "INSERT INTO wallets (address, name) VALUES (?, ?)", (address, name)
         )
         await db.commit()
     return True
 
 
-async def get_wallets(user_id: int) -> list[dict]:
-    """Return list of {name, address} dicts for user (WALLET-05: own only)."""
+async def get_wallets() -> list[dict]:
     async with aiosqlite.connect(config.DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT name, address FROM wallets WHERE user_id = ? ORDER BY id",
-            (user_id,),
+            "SELECT name, address FROM wallets ORDER BY id"
         ) as cursor:
             rows = await cursor.fetchall()
     return [{"name": row["name"], "address": row["address"]} for row in rows]
 
 
-async def remove_wallet(user_id: int, address: str) -> bool:
-    """Delete wallet by (user_id, address). Returns True if deleted (WALLET-05)."""
+async def remove_wallet(address: str) -> bool:
     async with aiosqlite.connect(config.DATABASE_PATH) as db:
         cursor = await db.execute(
-            "DELETE FROM wallets WHERE user_id = ? AND address = ?",
-            (user_id, address),
+            "DELETE FROM wallets WHERE address = ?", (address,)
         )
         await db.commit()
     return cursor.rowcount > 0
@@ -102,41 +95,37 @@ async def remove_wallet(user_id: int, address: str) -> bool:
 # ---------------------------------------------------------------------------
 
 async def get_all_wallets() -> list[dict]:
-    """Return all wallets across all users for polling loop: {user_id, address, name, last_block}."""
+    """Return all wallets for polling loop: {address, name, last_block}."""
     async with aiosqlite.connect(config.DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT user_id, address, name, last_block FROM wallets ORDER BY id"
+            "SELECT address, name, last_block FROM wallets ORDER BY id"
         ) as cursor:
             rows = await cursor.fetchall()
     return [dict(row) for row in rows]
 
 
-async def update_last_block(user_id: int, address: str, block_number: int) -> None:
-    """Update last_block for (user_id, address) pair — compound key prevents cross-user updates (T-02-03)."""
+async def update_last_block(address: str, block_number: int) -> None:
     async with aiosqlite.connect(config.DATABASE_PATH) as db:
         await db.execute(
-            "UPDATE wallets SET last_block = ? WHERE user_id = ? AND address = ?",
-            (block_number, user_id, address),
+            "UPDATE wallets SET last_block = ? WHERE address = ?",
+            (block_number, address),
         )
         await db.commit()
 
 
-async def is_alert_sent(tx_hash: str, user_id: int) -> bool:
-    """Return True iff (tx_hash, user_id) already in sent_alerts."""
+async def is_alert_sent(tx_hash: str) -> bool:
     async with aiosqlite.connect(config.DATABASE_PATH) as db:
         async with db.execute(
-            "SELECT 1 FROM sent_alerts WHERE tx_hash = ? AND user_id = ? LIMIT 1",
-            (tx_hash, user_id),
+            "SELECT 1 FROM sent_alerts WHERE tx_hash = ? LIMIT 1", (tx_hash,)
         ) as cursor:
             return await cursor.fetchone() is not None
 
 
-async def mark_alert_sent(tx_hash: str, user_id: int) -> None:
-    """Record (tx_hash, user_id) as alerted. INSERT OR IGNORE — idempotent (T-02-04)."""
+async def mark_alert_sent(tx_hash: str) -> None:
+    """INSERT OR IGNORE — idempotent."""
     async with aiosqlite.connect(config.DATABASE_PATH) as db:
         await db.execute(
-            "INSERT OR IGNORE INTO sent_alerts (tx_hash, user_id) VALUES (?, ?)",
-            (tx_hash, user_id),
+            "INSERT OR IGNORE INTO sent_alerts (tx_hash) VALUES (?)", (tx_hash,)
         )
         await db.commit()
