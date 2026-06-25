@@ -19,7 +19,7 @@
 4. /wallets показывает список с именами, адресами, балансами ETH и USD
 5. /removewallet удаляет кошелёк из списка
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [ ] `01-01-PLAN.md` — Walking Skeleton: scaffold, config, SQLite schema (wallets + last_block), whitelist middleware, /start
