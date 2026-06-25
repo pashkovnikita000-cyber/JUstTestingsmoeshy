@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-last_updated: "2026-06-25T21:00:00.000Z"
+status: executing
+last_updated: "2026-06-25T20:11:36.682Z"
 last_activity: 2026-06-25
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-06-25)
 ## Current Position
 
 Phase: 2
-Plan: 1 of 3 complete
-Status: In progress — 02-01 done, ready for 02-02
+Plan: 2 of 3 complete
+Status: In progress — 02-02 done, ready for 02-03
 Last activity: 2026-06-25
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 83%
 
 ## Accumulated Context
 
@@ -51,6 +51,9 @@ Progress: [███████░░░] 67%
 - 02-01: last_block=0 → fetch current block + return, no historical txns processed on first run
 - 02-01: value_wei kept as str in _parse_transactions — Decimal conversion at alert time (02-02)
 - 02-01: Decimal('0') fallback for ETH price — won't trigger alerts but won't crash polling loop
+- 02-02: strict > threshold (not >=) — $100 exactly does not trigger alert (MON-02)
+- 02-02: mark_alert_sent called after send_message, not before — T-02-06 repudiation mitigation
+- 02-02: per-tx try/except wraps format+send+mark — one failure never breaks the cycle (T-02-07)
 
 ### Blockers/Concerns
 
