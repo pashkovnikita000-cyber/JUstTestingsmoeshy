@@ -20,6 +20,8 @@ from bot.handlers import (
 
 async def _post_init(app: Application) -> None:  # type: ignore[type-arg]
     await init_db()
+    from bot.monitor import start_polling
+    start_polling(app)
 
 
 def main() -> None:
