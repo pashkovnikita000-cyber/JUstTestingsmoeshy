@@ -71,7 +71,22 @@ async def _check_wallet(
 
     max_block = max(tx["block_number"] for tx in txns)
     await update_last_block(wallet["user_id"], address, max_block)
-    # ponytail: alert dispatch added in 02-02 — intentional stub here
+
+    for tx in txns:
+        if tx["is_error"]:  # T-02-09: skip failed transactions
+            continue
+        if not _should_alert(tx["value_wei"], eth_price):  # MON-02: threshold check
+            continue
+        if await is_alert_sent(tx["hash"], wallet["user_id"]):  # MON-04: dedup
+            continue
+        try:
+            message = _format_alert(wallet["name"], address, tx, eth_price)
+            await app.bot.send_message(
+                chat_id=wallet["user_id"], text=message, parse_mode="Markdown"
+            )
+            await mark_alert_sent(tx["hash"], wallet["user_id"])  # mark AFTER send
+        except Exception:
+            logger.exception("Failed to send alert for tx %s", tx["hash"][:12])
 
 
 async def _check_wallets(app: Application) -> None:  # type: ignore[type-arg]
