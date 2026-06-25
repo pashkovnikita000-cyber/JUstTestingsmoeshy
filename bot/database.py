@@ -28,6 +28,17 @@ async def init_db() -> None:
             )
             """
         )
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sent_alerts (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                tx_hash    TEXT    NOT NULL,
+                user_id    INTEGER NOT NULL,
+                alerted_at TEXT    DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(tx_hash, user_id)
+            )
+            """
+        )
         await db.commit()
 
 
@@ -84,3 +95,48 @@ async def remove_wallet(user_id: int, address: str) -> bool:
         )
         await db.commit()
     return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Monitoring CRUD (MON-01, DATA-02)
+# ---------------------------------------------------------------------------
+
+async def get_all_wallets() -> list[dict]:
+    """Return all wallets across all users for polling loop: {user_id, address, name, last_block}."""
+    async with aiosqlite.connect(config.DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT user_id, address, name, last_block FROM wallets ORDER BY id"
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+async def update_last_block(user_id: int, address: str, block_number: int) -> None:
+    """Update last_block for (user_id, address) pair — compound key prevents cross-user updates (T-02-03)."""
+    async with aiosqlite.connect(config.DATABASE_PATH) as db:
+        await db.execute(
+            "UPDATE wallets SET last_block = ? WHERE user_id = ? AND address = ?",
+            (block_number, user_id, address),
+        )
+        await db.commit()
+
+
+async def is_alert_sent(tx_hash: str, user_id: int) -> bool:
+    """Return True iff (tx_hash, user_id) already in sent_alerts."""
+    async with aiosqlite.connect(config.DATABASE_PATH) as db:
+        async with db.execute(
+            "SELECT 1 FROM sent_alerts WHERE tx_hash = ? AND user_id = ? LIMIT 1",
+            (tx_hash, user_id),
+        ) as cursor:
+            return await cursor.fetchone() is not None
+
+
+async def mark_alert_sent(tx_hash: str, user_id: int) -> None:
+    """Record (tx_hash, user_id) as alerted. INSERT OR IGNORE — idempotent (T-02-04)."""
+    async with aiosqlite.connect(config.DATABASE_PATH) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO sent_alerts (tx_hash, user_id) VALUES (?, ?)",
+            (tx_hash, user_id),
+        )
+        await db.commit()
