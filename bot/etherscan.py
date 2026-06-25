@@ -39,6 +39,38 @@ def wei_to_eth(wei: int | str) -> Decimal:
     return Decimal(str(wei)) / Decimal(10 ** 18)
 
 
+def _parse_transactions(payload: dict) -> list[dict]:
+    """Parse Etherscan txlist response. Returns [] for 'No transactions found'. T-02-04."""
+    if str(payload.get("status")) != "1":
+        result = payload.get("result", "")
+        if isinstance(result, str) and "No transactions found" in result:
+            return []
+        msg = payload.get("message") or result or "unknown error"
+        raise ValueError(f"Etherscan txlist error: {msg}")
+    result = payload.get("result")
+    if not isinstance(result, list):
+        return []
+    return [
+        {
+            "hash": tx["hash"],
+            "from_addr": tx["from"],  # avoids Python reserved word
+            "to_addr": tx["to"],
+            "value_wei": tx["value"],  # str — Decimal conversion at alert time
+            "block_number": int(tx["blockNumber"]),
+            "is_error": tx["isError"] != "0",
+        }
+        for tx in result
+    ]
+
+
+def _parse_current_block(payload: dict) -> int:
+    """Parse eth_blockNumber hex response to int. T-02-02."""
+    try:
+        return int(payload["result"], 16)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"Etherscan block number parse error: {exc}") from exc
+
+
 def _parse_balance(payload: dict) -> Decimal:
     """Extract ETH balance from Etherscan account/balance response. T-01-06."""
     if str(payload.get("status")) != "1":
@@ -99,6 +131,30 @@ async def get_eth_price(session: aiohttp.ClientSession | None = None) -> Decimal
     """Return current ETH/USD price as Decimal."""
     payload = await _get({"module": "stats", "action": "ethprice"}, session=session)
     return _parse_price(payload)
+
+
+async def get_transactions(address: str, start_block: int, session: aiohttp.ClientSession | None = None) -> list[dict]:
+    """Fetch txlist for address starting at start_block. Returns [] if no new txs."""
+    if not validate_address(address):
+        raise ValueError(f"Invalid ETH address: {address!r}")
+    payload = await _get(
+        {
+            "module": "account",
+            "action": "txlist",
+            "address": address,
+            "startblock": str(start_block),
+            "endblock": "99999999",
+            "sort": "asc",
+        },
+        session=session,
+    )
+    return _parse_transactions(payload)
+
+
+async def get_current_block(session: aiohttp.ClientSession | None = None) -> int:
+    """Return current Ethereum block number (for last_block initialization)."""
+    payload = await _get({"module": "proxy", "action": "eth_blockNumber"}, session=session)
+    return _parse_current_block(payload)
 
 
 async def get_usdc_balance(address: str, session: aiohttp.ClientSession | None = None) -> Decimal:
