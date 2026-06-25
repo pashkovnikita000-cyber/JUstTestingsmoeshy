@@ -8,10 +8,45 @@ from decimal import Decimal
 import aiohttp
 from telegram.ext import Application
 
-from bot.database import get_all_wallets, update_last_block
-from bot.etherscan import get_current_block, get_eth_price, get_transactions
+from bot.database import get_all_wallets, is_alert_sent, mark_alert_sent, update_last_block
+from bot.etherscan import get_current_block, get_eth_price, get_transactions, wei_to_eth
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Pure helpers — unit-testable, no I/O (MON-02, MON-03)
+# ---------------------------------------------------------------------------
+
+def _should_alert(
+    value_wei: str | int,
+    eth_price: Decimal,
+    threshold: Decimal = Decimal("100"),
+) -> bool:
+    """Return True iff tx value exceeds threshold USD (strictly greater-than)."""
+    eth_amount = wei_to_eth(value_wei)
+    usd_value = eth_amount * eth_price
+    return usd_value > threshold
+
+
+def _format_alert(
+    wallet_name: str,
+    wallet_address: str,
+    tx: dict,
+    eth_price: Decimal,
+) -> str:
+    """Format a Telegram Markdown alert message for a transaction (MON-03)."""
+    is_incoming = tx["to_addr"].lower() == wallet_address.lower()
+    direction = "📥 Входящая" if is_incoming else "📤 Исходящая"
+    eth_amount = wei_to_eth(tx["value_wei"])
+    usd_amount = eth_amount * eth_price
+    tx_hash = tx["hash"]
+    return (
+        f"*{wallet_name}*\n\n"
+        f"{direction}: `{eth_amount:.4f}` ETH (${usd_amount:,.2f})\n\n"
+        f"Tx: `{tx_hash}`\n"
+        f"https://etherscan.io/tx/{tx_hash}"
+    )
 
 
 async def _check_wallet(
