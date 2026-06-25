@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-06-25T16:31:33.250Z"
-last_activity: 2026-06-25 -- Phase 01 planning complete
+last_updated: "2026-06-25T18:07:33.711Z"
+last_activity: 2026-06-25 -- 01-02 Etherscan client completed (TDD)
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 2
   percent: 0
 ---
 
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-25)
 
 **Core value:** Автономный 24/7 мониторинг — бот сам замечает крупные движения средств и шлёт алерт без ручного запроса.
-**Current focus:** Phase 01 — Bot Core & Wallet Management
+**Current focus:** Phase 01 — bot-core-wallet-management
 
 ## Current Position
 
-Phase: 01 (Bot Core & Wallet Management) — READY
-Plan: 1 of 3
-Status: Ready to execute
-Last activity: 2026-06-25 -- Phase 01 planning complete
+Phase: 01 (bot-core-wallet-management) — EXECUTING
+Plan: 3 of 3
+Status: Executing Phase 01
+Last activity: 2026-06-25 -- 01-02 Etherscan client completed (TDD)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███████░░░] 67%
 
 ## Accumulated Context
 
@@ -41,6 +41,9 @@ Progress: [░░░░░░░░░░] 0%
 - Init: Etherscan free tier API (5 req/sec, нужен API key)
 - Init: Whitelist в .env (не в БД)
 - Init: Фиксированный порог $100 USD
+- 01-02: Decimal(str(wei)) / Decimal(10**18) — str cast prevents float precision loss in wei_to_eth
+- 01-02: Module-level throttle (_last_request float + asyncio.sleep) sufficient for sequential Etherscan requests
+- 01-02: validate_address called in get_balance before API call — invalid addr never reaches Etherscan (T-01-04)
 
 ### Blockers/Concerns
 
