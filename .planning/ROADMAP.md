@@ -46,7 +46,7 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] `02-01-PLAN.md` — Polling worker: sent_alerts DB schema, Etherscan txlist + get_current_block, asyncio monitor loop, main.py wiring
+- [x] `02-01-PLAN.md` — Polling worker: sent_alerts DB schema, Etherscan txlist + get_current_block, asyncio monitor loop, main.py wiring
 - [ ] `02-02-PLAN.md` — Alert logic: _should_alert/$100 threshold, _format_alert (TDD), dedup+send wired into _check_wallet
 - [ ] `02-03-PLAN.md` — Deployment: Dockerfile (python:3.12-slim, non-root), docker-compose.yml, railway.toml, README
 
