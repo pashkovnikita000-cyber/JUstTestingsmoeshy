@@ -10,7 +10,10 @@ import aiohttp
 
 from bot import config
 
-_BASE_URL = "https://api.etherscan.io/api"
+_BASE_URL = "https://api.etherscan.io/v2/api"
+_CHAIN_ID = "1"  # Ethereum mainnet
+_USDC_CONTRACT = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+_USDC_DECIMALS = 6
 _MIN_INTERVAL = 0.25  # seconds between requests (D-06, D-12: free tier 5 req/sec)
 
 ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
@@ -68,7 +71,7 @@ async def _throttle() -> None:
 async def _get(params: dict, session: aiohttp.ClientSession | None = None) -> dict:
     """GET _BASE_URL with params, respecting throttle. Returns parsed JSON."""
     await _throttle()
-    params = {**params, "apikey": config.ETHERSCAN_API_KEY}
+    params = {**params, "chainid": _CHAIN_ID, "apikey": config.ETHERSCAN_API_KEY}
     own_session = session is None
     if own_session:
         session = aiohttp.ClientSession()
@@ -96,3 +99,23 @@ async def get_eth_price(session: aiohttp.ClientSession | None = None) -> Decimal
     """Return current ETH/USD price as Decimal."""
     payload = await _get({"module": "stats", "action": "ethprice"}, session=session)
     return _parse_price(payload)
+
+
+async def get_usdc_balance(address: str, session: aiohttp.ClientSession | None = None) -> Decimal:
+    """Return USDC token balance for address (mainnet ERC-20)."""
+    if not validate_address(address):
+        raise ValueError(f"Invalid ETH address: {address!r}")
+    payload = await _get(
+        {
+            "module": "account",
+            "action": "tokenbalance",
+            "contractaddress": _USDC_CONTRACT,
+            "address": address,
+            "tag": "latest",
+        },
+        session=session,
+    )
+    if str(payload.get("status")) != "1":
+        msg = payload.get("message") or payload.get("result") or "unknown error"
+        raise ValueError(f"Etherscan USDC error: {msg}")
+    return Decimal(str(payload["result"])) / Decimal(10 ** _USDC_DECIMALS)
