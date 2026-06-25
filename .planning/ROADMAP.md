@@ -43,10 +43,12 @@ Plans:
 4. Dockerfile собирается и бот стартует через `docker-compose up`
 5. Railway деплой работает, бот не падает при рестарте
 
-**Plans:**
-- `02-01-PLAN.md`: Transaction polling worker — фоновая задача, Etherscan tx API, last_block tracking
-- `02-02-PLAN.md`: Alert logic — дедупликация, форматирование сообщения, отправка в Telegram
-- `02-03-PLAN.md`: Dockerfile + Railway config + .env setup + README
+**Plans:** 3 plans
+
+Plans:
+- [ ] `02-01-PLAN.md` — Polling worker: sent_alerts DB schema, Etherscan txlist + get_current_block, asyncio monitor loop, main.py wiring
+- [ ] `02-02-PLAN.md` — Alert logic: _should_alert/$100 threshold, _format_alert (TDD), dedup+send wired into _check_wallet
+- [ ] `02-03-PLAN.md` — Deployment: Dockerfile (python:3.12-slim, non-root), docker-compose.yml, railway.toml, README
 
 ---
 
