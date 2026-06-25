@@ -43,7 +43,7 @@ Plans:
 4. Dockerfile собирается и бот стартует через `docker-compose up`
 5. Railway деплой работает, бот не падает при рестарте
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] `02-01-PLAN.md` — Polling worker: sent_alerts DB schema, Etherscan txlist + get_current_block, asyncio monitor loop, main.py wiring

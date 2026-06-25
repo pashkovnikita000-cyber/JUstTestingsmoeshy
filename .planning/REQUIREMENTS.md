@@ -29,8 +29,8 @@
 
 ### Infrastructure (INFRA)
 
-- [ ] **INFRA-01**: Dockerfile для деплоя на Railway
-- [ ] **INFRA-02**: Конфигурация через .env (BOT_TOKEN, ETHERSCAN_API_KEY, ALLOWED_USER_IDS)
+- [x] **INFRA-01**: Dockerfile для деплоя на Railway
+- [x] **INFRA-02**: Конфигурация через .env (BOT_TOKEN, ETHERSCAN_API_KEY, ALLOWED_USER_IDS)
 - [ ] **INFRA-03**: Rate limiting Etherscan API (не более 4 req/sec с буфером)
 
 ## v2 (Deferred)
